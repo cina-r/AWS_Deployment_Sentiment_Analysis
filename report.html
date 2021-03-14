@@ -14832,7 +14832,7 @@ Billable seconds: 6460
 </div><div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><strong>Answer:</strong><br>
-The models achieve an similar accuracy (84% and 85%). However, I think recurrent neural networks are better suited for sentiment analysis since the meaning of words often depends on the preceding words, which can be taken into acount by a memory cell.</p>
+The models achieve a similar accuracy (84% and 85%). However, I think recurrent neural networks are better suited for sentiment analysis since the meaning of words often depends on the preceding words, which can be taken into acount by a memory cell.</p>
 
 </div>
 </div>
@@ -14981,13 +14981,129 @@ The models achieve an similar accuracy (84% and 85%). However, I think recurrent
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[39]:</div>
+<div class="prompt input_prompt">In&nbsp;[48]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># !pygmentize serve/predict.py</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="o">!</span>pygmentize serve/predict.py
 </pre></div>
 
     </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+    <div class="prompt"></div>
+
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre><span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">argparse</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">json</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">os</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">pickle</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">sys</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">sagemaker_containers</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">pandas</span> <span class="ansi-blue-fg">as</span> <span class="ansi-cyan-fg ansi-underline">pd</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">numpy</span> <span class="ansi-blue-fg">as</span> <span class="ansi-cyan-fg ansi-underline">np</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">torch</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">torch</span><span class="ansi-cyan-fg ansi-underline">.</span><span class="ansi-cyan-fg ansi-underline">nn</span> <span class="ansi-blue-fg">as</span> <span class="ansi-cyan-fg ansi-underline">nn</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">torch</span><span class="ansi-cyan-fg ansi-underline">.</span><span class="ansi-cyan-fg ansi-underline">optim</span> <span class="ansi-blue-fg">as</span> <span class="ansi-cyan-fg ansi-underline">optim</span>
+<span class="ansi-blue-fg">import</span> <span class="ansi-cyan-fg ansi-underline">torch</span><span class="ansi-cyan-fg ansi-underline">.</span><span class="ansi-cyan-fg ansi-underline">utils</span><span class="ansi-cyan-fg ansi-underline">.</span><span class="ansi-cyan-fg ansi-underline">data</span>
+
+<span class="ansi-blue-fg">from</span> <span class="ansi-cyan-fg ansi-underline">model</span> <span class="ansi-blue-fg">import</span> LSTMClassifier
+
+<span class="ansi-blue-fg">from</span> <span class="ansi-cyan-fg ansi-underline">utils</span> <span class="ansi-blue-fg">import</span> review_to_words, convert_and_pad
+
+<span class="ansi-blue-fg">def</span> <span class="ansi-green-fg">model_fn</span>(model_dir):
+    <span class="ansi-yellow-fg">&#34;&#34;&#34;Load the PyTorch model from the `model_dir` directory.&#34;&#34;&#34;</span>
+    <span class="ansi-cyan-fg">print</span>(<span class="ansi-yellow-fg">&#34;</span><span class="ansi-yellow-fg">Loading model.</span><span class="ansi-yellow-fg">&#34;</span>)
+
+    <span class="ansi-white-fg"># First, load the parameters used to create the model.</span>
+    model_info = {}
+    model_info_path = os.path.join(model_dir, <span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">model_info.pth</span><span class="ansi-yellow-fg">&#39;</span>)
+    <span class="ansi-blue-fg">with</span> <span class="ansi-cyan-fg">open</span>(model_info_path, <span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">rb</span><span class="ansi-yellow-fg">&#39;</span>) <span class="ansi-blue-fg">as</span> f:
+        model_info = torch.load(f)
+
+    <span class="ansi-cyan-fg">print</span>(<span class="ansi-yellow-fg">&#34;</span><span class="ansi-yellow-fg">model_info: </span><span class="ansi-yellow-fg">{}</span><span class="ansi-yellow-fg">&#34;</span>.format(model_info))
+
+    <span class="ansi-white-fg"># Determine the device and construct the model.</span>
+    device = torch.device(<span class="ansi-yellow-fg">&#34;</span><span class="ansi-yellow-fg">cuda</span><span class="ansi-yellow-fg">&#34;</span> <span class="ansi-blue-fg">if</span> torch.cuda.is_available() <span class="ansi-blue-fg">else</span> <span class="ansi-yellow-fg">&#34;</span><span class="ansi-yellow-fg">cpu</span><span class="ansi-yellow-fg">&#34;</span>)
+    model = LSTMClassifier(model_info[<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">embedding_dim</span><span class="ansi-yellow-fg">&#39;</span>], model_info[<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">hidden_dim</span><span class="ansi-yellow-fg">&#39;</span>], model_info[<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">vocab_size</span><span class="ansi-yellow-fg">&#39;</span>])
+
+    <span class="ansi-white-fg"># Load the store model parameters.</span>
+    model_path = os.path.join(model_dir, <span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">model.pth</span><span class="ansi-yellow-fg">&#39;</span>)
+    <span class="ansi-blue-fg">with</span> <span class="ansi-cyan-fg">open</span>(model_path, <span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">rb</span><span class="ansi-yellow-fg">&#39;</span>) <span class="ansi-blue-fg">as</span> f:
+        model.load_state_dict(torch.load(f))
+
+    <span class="ansi-white-fg"># Load the saved word_dict.</span>
+    word_dict_path = os.path.join(model_dir, <span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">word_dict.pkl</span><span class="ansi-yellow-fg">&#39;</span>)
+    <span class="ansi-blue-fg">with</span> <span class="ansi-cyan-fg">open</span>(word_dict_path, <span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">rb</span><span class="ansi-yellow-fg">&#39;</span>) <span class="ansi-blue-fg">as</span> f:
+        model.word_dict = pickle.load(f)
+
+    model.to(device).eval()
+
+    <span class="ansi-cyan-fg">print</span>(<span class="ansi-yellow-fg">&#34;</span><span class="ansi-yellow-fg">Done loading model.</span><span class="ansi-yellow-fg">&#34;</span>)
+    <span class="ansi-blue-fg">return</span> model
+
+<span class="ansi-blue-fg">def</span> <span class="ansi-green-fg">input_fn</span>(serialized_input_data, content_type):
+    <span class="ansi-cyan-fg">print</span>(<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">Deserializing the input data.</span><span class="ansi-yellow-fg">&#39;</span>)
+    <span class="ansi-blue-fg">if</span> content_type == <span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">text/plain</span><span class="ansi-yellow-fg">&#39;</span>:
+        data = serialized_input_data.decode(<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">utf-8</span><span class="ansi-yellow-fg">&#39;</span>)
+        <span class="ansi-blue-fg">return</span> data
+    <span class="ansi-blue-fg">raise</span> <span class="ansi-cyan-fg">Exception</span>(<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">Requested unsupported ContentType in content_type: </span><span class="ansi-yellow-fg">&#39;</span> + content_type)
+
+<span class="ansi-blue-fg">def</span> <span class="ansi-green-fg">output_fn</span>(prediction_output, accept):
+    <span class="ansi-cyan-fg">print</span>(<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">Serializing the generated output.</span><span class="ansi-yellow-fg">&#39;</span>)
+    <span class="ansi-blue-fg">return</span> <span class="ansi-cyan-fg">str</span>(prediction_output)
+
+<span class="ansi-blue-fg">def</span> <span class="ansi-green-fg">predict_fn</span>(input_data, model):
+    <span class="ansi-cyan-fg">print</span>(<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">Inferring sentiment of input data.</span><span class="ansi-yellow-fg">&#39;</span>)
+
+    device = torch.device(<span class="ansi-yellow-fg">&#34;</span><span class="ansi-yellow-fg">cuda</span><span class="ansi-yellow-fg">&#34;</span> <span class="ansi-blue-fg">if</span> torch.cuda.is_available() <span class="ansi-blue-fg">else</span> <span class="ansi-yellow-fg">&#34;</span><span class="ansi-yellow-fg">cpu</span><span class="ansi-yellow-fg">&#34;</span>)
+    
+    <span class="ansi-blue-fg">if</span> model.word_dict <span class="ansi-magenta-fg">is</span> <span class="ansi-blue-fg">None</span>:
+        <span class="ansi-blue-fg">raise</span> <span class="ansi-cyan-fg">Exception</span>(<span class="ansi-yellow-fg">&#39;</span><span class="ansi-yellow-fg">Model has not been loaded properly, no word_dict.</span><span class="ansi-yellow-fg">&#39;</span>)
+    
+    <span class="ansi-white-fg"># TODO: Process input_data so that it is ready to be sent to our model.</span>
+    <span class="ansi-white-fg">#       You should produce two variables:</span>
+    <span class="ansi-white-fg">#         data_X   - A sequence of length 500 which represents the converted review</span>
+    <span class="ansi-white-fg">#         data_len - The length of the review        </span>
+
+    temp = review_to_words(input_data)  <span class="ansi-white-fg">#</span>
+    data_X, data_len = convert_and_pad(model.word_dict, temp)  <span class="ansi-white-fg">#</span>
+
+    <span class="ansi-white-fg"># Using data_X and data_len we construct an appropriate input tensor. Remember</span>
+    <span class="ansi-white-fg"># that our model expects input data of the form &#39;len, review[500]&#39;.</span>
+    data_pack = np.hstack((data_len, data_X))
+    data_pack = data_pack.reshape(<span class="ansi-blue-fg">1</span>, -<span class="ansi-blue-fg">1</span>)
+    
+    data = torch.from_numpy(data_pack)
+    data = data.to(device)
+
+    <span class="ansi-white-fg"># Make sure to put the model into evaluation mode</span>
+    model.eval()
+
+    <span class="ansi-white-fg"># TODO: Compute the result of applying the model to the input data. The variable `result` should</span>
+    <span class="ansi-white-fg">#       be a numpy array which contains a single integer which is either 1 or 0</span>
+
+    <span class="ansi-blue-fg">with</span> torch.no_grad():
+        output = model(data)
+    
+<span class="ansi-white-fg">#     output = output.to(&#39;cpu&#39;)    # we anyway don&#39;t have a GPU on our AWS instance </span>
+<span class="ansi-white-fg">#     result = torch.round(output.squeeze())</span>
+<span class="ansi-white-fg">#     result = np.squeeze(model(data))</span>
+<span class="ansi-white-fg">#     result = np.round(output.numpy())</span>
+    result = np.round(output.detach().numpy(), <span class="ansi-blue-fg">0</span>)
+    
+    <span class="ansi-blue-fg">return</span> result
+</pre>
+</div>
+</div>
+
 </div>
 </div>
 
