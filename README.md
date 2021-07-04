@@ -8,7 +8,7 @@ This is the fifth and last project of the Udacity Deep Learning Nanodegree Progr
 3. > cd .\env\Scripts
 4. >activate
 5. >pip install -r requirements.txt
-6. >python -m ipykernel install --name=<choose-a-name-to-be-displayed-in-jupyter>
+6. >python -m ipykernel install --name=\<choose-a-name-to-be-displayed-in-jupyter\>
 
 ## Problem statement
 We want to use Amazon SageMaker to deploy a sentiment analysis model and use it in a simple web page. The web page offers end users the possiblity to enter a movie review and then sends that review to our deployed model. The model will predict the review's sentiment in order to show it on the web page. 
